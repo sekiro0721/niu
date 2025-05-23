@@ -1,0 +1,162 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <pthread.h>
+
+#define MAX_USERS 1000
+#define MAX_QUESTIONS 5000
+#define MAX_EXAMS 100
+#define MAX_RESULTS 10000
+
+typedef enum {
+    ROLE_STUDENT = 0,
+    ROLE_TEACHER = 1,
+    ROLE_ADMIN = 2,
+    ROLE_INSPECTOR = 3
+} UserRole;
+
+typedef struct {
+    int id;
+    char username[50];
+    char password[50];
+    UserRole role;
+    char department[50];
+} User;
+
+typedef struct {
+    int id;
+    char stem[500];
+    char options[4][200];
+    int answer;
+    int score;
+    int difficulty;
+    char knowledge_point[50];
+} Question;
+
+typedef struct {
+    int id;
+    char title[100];
+    time_t start_time;
+    time_t end_time;
+    int duration;
+    int total_score;
+    int pass_score;
+    int question_ids[100];
+    int question_count;
+} Exam;
+
+typedef struct {
+    int exam_id;
+    int student_id;
+    int score;
+    int is_cheated;
+} ExamResult;
+
+User users[MAX_USERS];
+Question questions[MAX_QUESTIONS];
+Exam exams[MAX_EXAMS];
+ExamResult exam_results[MAX_RESULTS];
+int user_count = 0;
+int question_count = 0;
+int exam_count = 0;
+int result_count = 0;
+
+pthread_mutex_t db_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// 添加用户
+void add_user(User* user) {
+    pthread_mutex_lock(&db_mutex);
+    if (user_count < MAX_USERS) {
+        users[user_count++] = *user;
+    }
+    pthread_mutex_unlock(&db_mutex);
+}
+
+// 添加试题
+void add_question(Question* question) {
+    pthread_mutex_lock(&db_mutex);
+    if (question_count < MAX_QUESTIONS) {
+        questions[question_count++] = *question;
+    }
+    pthread_mutex_unlock(&db_mutex);
+}
+
+// 创建考试
+void create_exam(Exam* exam) {
+    pthread_mutex_lock(&db_mutex);
+    if (exam_count < MAX_EXAMS) {
+        exams[exam_count++] = *exam;
+    }
+    pthread_mutex_unlock(&db_mutex);
+}
+
+// 向考试中添加试题
+void add_question_to_exam(Exam* exam, int question_id) {
+    pthread_mutex_lock(&db_mutex);
+    if (exam->question_count < 100) {
+        exam->question_ids[exam->question_count++] = question_id;
+        exam->total_score += questions[question_id].score;
+    }
+    pthread_mutex_unlock(&db_mutex);
+}
+
+// 学生参加考试
+void take_exam(int exam_id, int student_id, int score, int is_cheated) {
+    pthread_mutex_lock(&db_mutex);
+    if (result_count < MAX_RESULTS) {
+        exam_results[result_count].exam_id = exam_id;
+        exam_results[result_count].student_id = student_id;
+        exam_results[result_count].score = score;
+        exam_results[result_count].is_cheated = is_cheated;
+        result_count++;
+    }
+    pthread_mutex_unlock(&db_mutex);
+}
+
+// 计算考试的平均分
+void calculate_average_score(int exam_id, float* average) {
+    int total = 0;
+    int count = 0;
+    pthread_mutex_lock(&db_mutex);
+    for (int i = 0; i < result_count; i++) {
+        if (exam_results[i].exam_id == exam_id) {
+            total += exam_results[i].score;
+            count++;
+        }
+    }
+    *average = count ? (float)total / count : 0;
+    pthread_mutex_unlock(&db_mutex);
+}
+
+// 主程序
+int main() {
+    // 初始化
+    pthread_mutex_init(&db_mutex, NULL);
+
+    // 示例：添加用户
+    User user1 = {1, "teacher1", "password", ROLE_TEACHER, "Math"};
+    add_user(&user1);
+
+    // 示例：添加试题
+    Question q1 = {1, "What is 2+2?", "A. 3", "B. 4", "C. 5", "D. 6", 1, 10, 1, "Basic Math"};
+    add_question(&q1);
+
+    // 示例：创建考试
+    Exam exam1 = {1, "Midterm Exam", time(NULL), time(NULL) + 3600, 60, 50, {0}, 0};
+    create_exam(&exam1);
+    add_question_to_exam(&exam1, 0); // 添加试题到考试
+
+    // 示例：学生参加考试
+    take_exam(0, 0, 85, 0); // 假设学生ID为0，考试ID为0
+
+    // 示例：计算平均分
+    float average;
+    calculate_average_score(0, &average);
+    printf("Average Score: %.2f\n", average);
+
+    // 保存数据（示例，实际中需要实现）
+    // save_data();
+
+    return 0;
+}
